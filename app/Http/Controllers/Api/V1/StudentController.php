@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 class StudentController extends Controller
@@ -82,12 +83,32 @@ class StudentController extends Controller
             $data['student_number'] = $this->generateStudentNumber();
         }
 
+        // =========================================
+        // 1. Unda User kwa mwanafunzi
+        // =========================================
+        $defaultPassword = 'student123';
+
+        $user = User::create([
+            'username' => $data['student_number'],
+            'full_name' => $data['full_name'],
+            'email' => $data['email'] ?? null,
+            'phone' => $data['parent_phone'] ?? null,
+            'password' => Hash::make($defaultPassword),
+            'role' => 'student',
+            'is_active' => $data['is_active'] ?? true,
+        ]);
+
+        // =========================================
+        // 2. Unda Student (na user_id)
+        // =========================================
+        $data['user_id'] = $user->id;
         $student = Student::create($data);
 
         return response()->json([
             'success' => true,
             'message' => 'Student created',
             'data' => new StudentResource($student),
+            'default_password' => $defaultPassword,
         ], 201);
     }
 
@@ -128,6 +149,14 @@ class StudentController extends Controller
     public function destroy(Student $student): JsonResponse
     {
         $this->deletePhoto($student);
+
+        // =========================================
+        // Futa User pia (kama ipo)
+        // =========================================
+        if ($student->user_id) {
+            User::where('id', $student->user_id)->where('role', 'student')->delete();
+        }
+
         $student->delete();
 
         return response()->json([
