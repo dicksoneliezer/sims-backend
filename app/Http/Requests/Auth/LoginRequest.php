@@ -14,8 +14,19 @@ class LoginRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'username' => ['required', 'string', 'max:100'],
+            // 'username' ni field ya msingi (inaweza kubeba username, email, au phone)
+            'username' => ['required_without:login', 'nullable', 'string', 'max:150'],
+            // 'login' ni field ya hiari (kwa frontend mpya inayotumia 'login')
+            'login' => ['required_without:username', 'nullable', 'string', 'max:150'],
             'password' => ['required', 'string'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'username.required_without' => 'The username, email, or phone field is required.',
+            'login.required_without' => 'The username, email, or phone field is required.',
         ];
     }
 }

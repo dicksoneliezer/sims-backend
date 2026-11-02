@@ -17,7 +17,16 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         $credentials = $request->validated();
-        $user = User::where('username', $credentials['username'])->first();
+
+        // =========================================
+        // Kubali login kwa username, email, au phone
+        // =========================================
+        $login = $credentials['username'] ?? $credentials['login'] ?? '';
+
+        $user = User::where('username', $login)
+            ->orWhere('email', $login)
+            ->orWhere('phone', $login)
+            ->first();
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             if ($user) {
