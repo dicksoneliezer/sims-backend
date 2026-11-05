@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
+use App\Models\Scopes\SchoolScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class StudentPayment extends Model
 {
+    use BelongsToSchool;
+
     protected $table = 'student_payments';
 
     public $timestamps = false;
@@ -73,14 +78,9 @@ class StudentPayment extends Model
 
     public static function generateControlNumber(): string
     {
-        $date = now()->format('Ymd');
-        $prefix = "CTRL-{$date}-";
-        $sequence = self::where('control_number', 'like', "{$prefix}%")->count() + 1;
-
         do {
-            $controlNumber = $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
-            $sequence++;
-        } while (self::where('control_number', $controlNumber)->exists());
+            $controlNumber = 'CTRL-'.now()->format('Ymd').'-'.strtoupper(Str::random(16));
+        } while (self::withoutGlobalScope(SchoolScope::class)->where('control_number', $controlNumber)->exists());
 
         return $controlNumber;
     }

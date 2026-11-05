@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @mixin User
@@ -25,7 +24,7 @@ class TeacherResource extends JsonResource
             'role' => $this->role,
             'is_active' => $this->is_active,
             'last_login' => $this->last_login?->toIso8601String(),
-            'profile_pic_url' => $this->profile_pic ? Storage::disk('public')->url($this->profile_pic) : null,
+            'profile_pic_url' => $this->profile_pic ? route('school-files.avatar', ['userId' => $this->id, 'v' => substr(hash('sha256', $this->profile_pic), 0, 16)]) : null,
             'classes_count' => $this->whenCounted('teacherClasses'),
             'subjects_count' => $this->whenCounted('teacherSubjects'),
             'classes' => $this->whenLoaded('teacherClasses', fn () => $this->teacherClasses->map(fn ($assignment) => [

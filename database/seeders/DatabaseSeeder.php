@@ -2,18 +2,18 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
+use App\Models\School;
+use App\Services\SchoolContext;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
      */
     public function run(): void
     {
+        app(SchoolContext::class)->set((int) School::query()->oldest('id')->value('id'));
         $this->call([
             UserRoleSeeder::class,
             StudentSeeder::class,

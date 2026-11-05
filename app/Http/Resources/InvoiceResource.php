@@ -31,6 +31,8 @@ class InvoiceResource extends JsonResource
                 'academic_year' => $this->feeStructure->academic_year,
             ] : null),
             'description' => $this->description,
+            'period' => $this->period,
+            'payment_ids' => $this->whenLoaded('transactions', fn () => $this->transactions->whereIn('type', ['payment', 'bill_allocation'])->pluck('reference')->filter()->unique()->values()),
             'amount' => $this->amount,
             'amount_paid' => $this->amount_paid,
             'balance' => $this->balance,

@@ -54,16 +54,16 @@ class ControlNumberController extends Controller
     {
         $data = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
-            'invoice_id' => ['required', 'integer', 'exists:invoices,id'],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
             'payment_method' => ['required', Rule::in(array_keys(PaymentService::METHODS))],
             'description' => ['nullable', 'string'],
         ]);
 
         $student = Student::findOrFail($data['student_id']);
-        $invoice = Invoice::findOrFail($data['invoice_id']);
+        $invoice = empty($data['invoice_id']) ? null : Invoice::findOrFail($data['invoice_id']);
 
-        if ((int) $invoice->student_id !== (int) $student->id) {
+        if ($invoice && (int) $invoice->student_id !== (int) $student->id) {
             throw ValidationException::withMessages([
                 'invoice_id' => 'The selected invoice does not belong to this student.',
             ]);

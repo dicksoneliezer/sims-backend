@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Models\Expense;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @mixin Expense
@@ -24,7 +23,7 @@ class ExpenseResource extends JsonResource
             'paid_to' => $this->paid_to,
             'payment_method' => $this->payment_method,
             'receipt' => $this->receipt,
-            'receipt_url' => $this->receipt ? Storage::disk('public')->url($this->receipt) : null,
+            'receipt_url' => $this->receipt ? route('school-files.receipt', ['expense' => $this->id, 'v' => substr(hash('sha256', $this->receipt), 0, 16)]) : null,
             'created_by' => $this->created_by,
             'created_at' => $this->created_at?->toIso8601String(),
         ];

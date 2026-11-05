@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class RollCall extends Model
 {
+    use BelongsToSchool;
+
     protected $table = 'roll_calls';
 
     protected $fillable = [

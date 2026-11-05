@@ -14,7 +14,7 @@ class TransactionController extends Controller
     {
         $perPage = min((int) $request->integer('per_page', 15), 100);
 
-        $transactions = Transaction::query()
+        $transactions = Transaction::query()->whereNotIn('type', ['bill_allocation', 'billing_opening'])
             ->with(['student:id,student_number,full_name,class', 'invoice:id,invoice_number'])
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->string('search')->toString();

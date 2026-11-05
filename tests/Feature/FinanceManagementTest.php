@@ -6,6 +6,7 @@ use App\Models\FeeStructure;
 use App\Models\Invoice;
 use App\Models\SchoolClass;
 use App\Models\Student;
+use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -96,7 +97,8 @@ class FinanceManagementTest extends TestCase
             'status' => 'partial',
         ]);
 
-        $this->assertDatabaseCount('transactions', 1);
+        $this->assertSame(1, Transaction::where('type', 'payment')->count());
+        $this->assertEquals(400, Transaction::where('type', 'bill_allocation')->sum('amount'));
 
         $this->putJson("/api/v1/accountant/invoices/{$invoice->id}", ['amount' => 300])
             ->assertUnprocessable()

@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Models\Student;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @mixin Student
@@ -17,6 +16,7 @@ class StudentResource extends JsonResource
         return [
             'id' => $this->id,
             'user_id' => $this->user_id,
+            'username' => $this->whenLoaded('user', fn () => $this->user?->username),
             'student_number' => $this->student_number,
             'full_name' => $this->full_name,
             'class' => $this->class,
@@ -39,7 +39,7 @@ class StudentResource extends JsonResource
             'opening_balance' => $this->opening_balance,
             'as_of_date' => $this->as_of_date?->toDateString(),
             'photo' => $this->photo,
-            'photo_url' => $this->photo ? Storage::disk('public')->url($this->photo) : null,
+            'photo_url' => $this->photo ? route('school-files.student', ['student' => $this->id, 'v' => substr(hash('sha256', $this->photo), 0, 16)]) : null,
             'is_active' => $this->is_active,
             'parents' => $this->whenLoaded('parents', fn () => $this->parents->map(fn ($parent) => [
                 'id' => $parent->id,

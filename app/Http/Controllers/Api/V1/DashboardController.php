@@ -10,6 +10,8 @@ use App\Models\Exam;
 use App\Models\ExamResult;
 use App\Models\Expense;
 use App\Models\Invoice;
+use App\Models\School;
+use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\StudentPayment;
 use App\Models\SyllabusProgress;
@@ -17,6 +19,7 @@ use App\Models\SyllabusTopic;
 use App\Models\TeacherNote;
 use App\Models\TeacherSubject;
 use App\Models\User;
+use App\Services\BillingService;
 use App\Services\TeacherAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,7 +49,7 @@ class DashboardController extends Controller
             'modules' => self::MODULES[$user->role] ?? [],
         ];
 
-        if (in_array($user->role, ['super_admin', 'system_admin'], true)) {
+        if ($user->role === 'super_admin') {
             $data['stats'] = [
                 'total_users' => User::count(),
                 'active_users' => User::where('is_active', true)->count(),
@@ -56,6 +59,14 @@ class DashboardController extends Controller
                     ->selectRaw('role, count(*) as total')
                     ->groupBy('role')
                     ->pluck('total', 'role'),
+            ];
+        }
+
+        if ($user->role === 'system_admin') {
+            $data['stats'] = [
+                'schools_count' => School::count(),
+                'active_schools' => School::where('is_active', true)->count(),
+                'school_admins' => User::withoutGlobalScope(SchoolScope::class)->where('role', 'super_admin')->count(),
             ];
         }
 
@@ -116,6 +127,8 @@ class DashboardController extends Controller
             $studentIds = $student ? collect([$student->id]) : collect();
 
             $attendance = Attendance::whereIn('student_id', $studentIds)->get();
+            $student = Student::where('user_id', $user->id)->first();
+            $data['financial_summary'] = $student ? app(BillingService::class)->summary($student) : null;
             $data['stats'] = [
                 'results' => ExamResult::whereIn('student_id', $studentIds)->count(),
                 'average_marks' => ExamResult::whereIn('student_id', $studentIds)->avg('marks'),

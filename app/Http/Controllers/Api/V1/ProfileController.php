@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Rules\UniqueLoginIdentifier;
+use App\Services\SchoolFileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class ProfileController extends Controller
@@ -17,7 +18,7 @@ class ProfileController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Profile retrieved',
-            'data' => new UserResource($request->user()),
+            'data' => new UserResource($request->user()->load('school:id,name,code')),
         ]);
     }
 
@@ -27,8 +28,8 @@ class ProfileController extends Controller
 
         $validated = $request->validate([
             'full_name' => ['sometimes', 'string', 'max:150'],
-            'email' => ['sometimes', 'nullable', 'email', 'max:150', 'unique:users,email,'.$user->id],
-            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:150', 'unique:users,email,'.$user->id, new UniqueLoginIdentifier($user->id)],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30', new UniqueLoginIdentifier($user->id)],
         ]);
 
         $user->fill($validated)->save();
@@ -36,7 +37,7 @@ class ProfileController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Profile updated',
-            'data' => new UserResource($user->fresh()),
+            'data' => new UserResource($user->fresh()->load('school:id,name,code')),
         ]);
     }
 
@@ -49,16 +50,16 @@ class ProfileController extends Controller
         $user = $request->user();
 
         if ($user->profile_pic) {
-            Storage::disk('public')->delete($user->profile_pic);
+            app(SchoolFileService::class)->delete($user->profile_pic);
         }
 
-        $path = $request->file('avatar')->store('avatars', 'public');
+        $path = app(SchoolFileService::class)->store($request->file('avatar'), 'avatars');
         $user->forceFill(['profile_pic' => $path])->save();
 
         return response()->json([
             'success' => true,
             'message' => 'Profile picture updated',
-            'data' => new UserResource($user->fresh()),
+            'data' => new UserResource($user->fresh()->load('school:id,name,code')),
         ]);
     }
 

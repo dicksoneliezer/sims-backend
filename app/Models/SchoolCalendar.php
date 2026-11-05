@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SchoolCalendar extends Model
 {
+    use BelongsToSchool;
+
     protected $table = 'school_calendar';
 
     protected $fillable = ['title', 'description', 'start_date', 'end_date', 'type', 'created_by'];

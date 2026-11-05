@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\Pivot;
 
-class ParentStudent extends Model
+class ParentStudent extends Pivot
 {
+    use BelongsToSchool;
+
+    public $incrementing = true;
+
     protected $fillable = ['parent_id', 'student_id', 'relationship', 'is_primary'];
 
     protected function casts(): array

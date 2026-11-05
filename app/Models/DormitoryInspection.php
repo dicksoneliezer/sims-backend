@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class DormitoryInspection extends Model
 {
+    use BelongsToSchool;
+
     protected $table = 'dormitory_inspections';
 
     protected $fillable = [

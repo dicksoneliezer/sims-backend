@@ -2,17 +2,21 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Invoice extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = [
         'invoice_number',
         'student_id',
         'fee_structure_id',
         'description',
+        'period',
         'amount',
         'amount_paid',
         'balance',

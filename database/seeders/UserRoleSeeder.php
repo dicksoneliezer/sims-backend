@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Scopes\SchoolScope;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
@@ -24,7 +25,7 @@ class UserRoleSeeder extends Seeder
         ];
 
         foreach ($users as $user) {
-            User::updateOrCreate(
+            ($user['role'] === 'system_admin' ? User::withoutGlobalScope(SchoolScope::class) : User::query())->updateOrCreate(
                 ['username' => $user['username']],
                 $user + ['is_active' => true],
             );

@@ -8,9 +8,11 @@ use App\Http\Requests\Invoice\StoreInvoiceRequest;
 use App\Http\Requests\Invoice\UpdateInvoiceRequest;
 use App\Http\Resources\InvoiceResource;
 use App\Models\Invoice;
+use App\Models\Student;
 use App\Services\InvoiceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class InvoiceController extends Controller
 {
@@ -87,21 +89,25 @@ class InvoiceController extends Controller
 
     public function destroy(Invoice $invoice): JsonResponse
     {
-        if ((float) $invoice->amount_paid > 0 || $invoice->payments()->exists() || $invoice->transactions()->exists()) {
+        return DB::transaction(function () use ($invoice): JsonResponse {
+            Student::whereKey($invoice->student_id)->lockForUpdate()->firstOrFail();
+            $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if ((float) $invoice->amount_paid > 0 || $invoice->payments()->exists() || $invoice->transactions()->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invoices with payments cannot be deleted.',
+                    'code' => 422,
+                ], 422);
+            }
+
+            $invoice->delete();
+
             return response()->json([
-                'success' => false,
-                'message' => 'Invoices with payments cannot be deleted.',
-                'code' => 422,
-            ], 422);
-        }
-
-        $invoice->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Invoice deleted',
-            'data' => null,
-        ]);
+                'success' => true,
+                'message' => 'Invoice deleted',
+                'data' => null,
+            ]);
+        });
     }
 
     public function generate(GenerateInvoicesRequest $request): JsonResponse

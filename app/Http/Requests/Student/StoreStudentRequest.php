@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Student;
 
+use App\Rules\UniqueLoginIdentifier;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,7 +26,7 @@ class StoreStudentRequest extends FormRequest
             'psle_number' => ['nullable', 'string', 'max:50'],
             'index_number' => ['nullable', 'string', 'max:50'],
             'parent_phone' => ['nullable', 'string', 'max:30'],
-            'email' => ['nullable', 'email', 'max:150'],
+            'email' => ['nullable', 'email', 'max:150', new UniqueLoginIdentifier],
             'residence' => ['nullable', 'string', 'max:150'],
             'gender' => ['nullable', Rule::in(['male', 'female'])],
             'date_of_birth' => ['nullable', 'date', 'before:today'],

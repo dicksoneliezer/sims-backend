@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Student;
 
+use App\Rules\UniqueLoginIdentifier;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -27,7 +28,7 @@ class UpdateStudentRequest extends FormRequest
             'psle_number' => ['sometimes', 'nullable', 'string', 'max:50'],
             'index_number' => ['sometimes', 'nullable', 'string', 'max:50'],
             'parent_phone' => ['sometimes', 'nullable', 'string', 'max:30'],
-            'email' => ['sometimes', 'nullable', 'email', 'max:150'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:150', new UniqueLoginIdentifier($this->route('student')->user_id)],
             'residence' => ['sometimes', 'nullable', 'string', 'max:150'],
             'gender' => ['sometimes', 'nullable', Rule::in(['male', 'female'])],
             'date_of_birth' => ['sometimes', 'nullable', 'date', 'before:today'],

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Timetable extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = [
         'class_id',
         'subject_id',

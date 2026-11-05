@@ -3,10 +3,12 @@
 namespace App\Services;
 
 use App\Models\Invoice;
+use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\StudentPayment;
 use App\Models\Transaction;
 use App\Models\User;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -47,7 +49,7 @@ class PaymentService
             'logo' => null,
             'requires_phone' => false,
             'processing_time' => 'Instant',
-            'parent' => false,
+            'parent' => true,
         ],
     ];
 
@@ -73,6 +75,7 @@ class PaymentService
         float $amount,
         string $method,
         ?string $description = null,
+        ?string $controlNumber = null,
     ): StudentPayment {
         if (! array_key_exists($method, self::METHODS)) {
             throw ValidationException::withMessages([
@@ -86,7 +89,8 @@ class PaymentService
             ]);
         }
 
-        return DB::transaction(function () use ($student, $invoice, $amount, $method, $description) {
+        return DB::transaction(function () use ($student, $invoice, $amount, $method, $description, $controlNumber) {
+            Student::whereKey($student->id)->lockForUpdate()->firstOrFail();
             if ($invoice) {
                 $invoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
@@ -96,23 +100,12 @@ class PaymentService
                     ]);
                 }
 
-                if ((float) $invoice->balance <= 0) {
-                    throw ValidationException::withMessages([
-                        'invoice_id' => 'This invoice has already been fully paid.',
-                    ]);
-                }
-
-                if ($amount > (float) $invoice->balance) {
-                    throw ValidationException::withMessages([
-                        'amount' => 'The payment amount cannot exceed the invoice balance.',
-                    ]);
-                }
             }
 
             return StudentPayment::create([
                 'student_id' => $student->id,
                 'invoice_id' => $invoice?->id,
-                'control_number' => StudentPayment::generateControlNumber(),
+                'control_number' => $controlNumber ?? StudentPayment::generateControlNumber(),
                 'amount' => round($amount, 2),
                 'description' => $description ?: ($invoice?->description ?: 'School fees payment'),
                 'status' => 'pending',
@@ -123,8 +116,10 @@ class PaymentService
         });
     }
 
-    public function process(StudentPayment $payment, string $method, ?string $phoneNumber, User $actor): StudentPayment
+    public function process(StudentPayment $payment, string $method, ?string $phoneNumber, User $actor, ?string $externalReference = null): StudentPayment
     {
+        abort_unless(in_array($actor->role, ['accountant', 'super_admin'], true), 403, 'Only an accountant can confirm received payments.');
+
         if (! array_key_exists($method, self::METHODS)) {
             throw ValidationException::withMessages([
                 'payment_method' => 'The selected payment method is invalid.',
@@ -137,8 +132,13 @@ class PaymentService
             ]);
         }
 
-        return DB::transaction(function () use ($payment, $method, $actor) {
+        return DB::transaction(function () use ($payment, $method, $actor, $externalReference) {
+            $student = Student::whereKey($payment->student_id)->lockForUpdate()->firstOrFail();
             $payment = StudentPayment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
+
+            if ($payment->isCompleted()) {
+                return $payment->load(['student:id,full_name,student_number,class', 'invoice']);
+            }
 
             if (! $payment->isPending()) {
                 throw ValidationException::withMessages([
@@ -152,42 +152,26 @@ class PaymentService
                 ]);
             }
 
-            $invoice = null;
-
-            if ($payment->invoice_id) {
-                $invoice = Invoice::whereKey($payment->invoice_id)->lockForUpdate()->firstOrFail();
-
-                if ((float) $invoice->balance < (float) $payment->amount) {
-                    throw ValidationException::withMessages([
-                        'amount' => 'The invoice balance is lower than the payment amount.',
-                    ]);
-                }
+            $transactionReference = $externalReference ? strtoupper($method).'-S'.$student->school_id.'-'.strtoupper($externalReference) : $this->transactionReference($method);
+            if (Transaction::withoutGlobalScope(SchoolScope::class)->where('transaction_ref', $transactionReference)->exists() || ($externalReference && Transaction::where('transaction_ref', strtoupper($method).'-'.strtoupper($externalReference))->exists())) {
+                throw ValidationException::withMessages(['reference' => 'This payment reference has already been recorded.']);
             }
 
-            $transactionReference = $this->transactionReference($method);
-
-            Transaction::create([
-                'transaction_ref' => $transactionReference,
-                'student_id' => $payment->student_id,
-                'invoice_id' => $payment->invoice_id,
-                'type' => 'payment',
-                'amount' => $payment->amount,
-                'payment_method' => $method,
-                'description' => $payment->description,
-                'status' => 'completed',
-                'reference' => $payment->control_number,
-                'created_by' => $actor->id,
-            ]);
-
-            if ($invoice) {
-                $amountPaid = round((float) $invoice->amount_paid + (float) $payment->amount, 2);
-                $balance = round((float) $invoice->amount - $amountPaid, 2);
-
-                $invoice->forceFill([
-                    'amount_paid' => $amountPaid,
-                    'balance' => max($balance, 0),
-                    'status' => $balance <= 0 ? 'paid' : 'partial',
-                ])->save();
+            try {
+                Transaction::create([
+                    'transaction_ref' => $transactionReference,
+                    'student_id' => $payment->student_id,
+                    'invoice_id' => null,
+                    'type' => 'payment',
+                    'amount' => $payment->amount,
+                    'payment_method' => $method,
+                    'description' => $payment->description,
+                    'status' => 'completed',
+                    'reference' => $payment->control_number,
+                    'created_by' => $actor->id,
+                ]);
+            } catch (UniqueConstraintViolationException $error) {
+                throw ValidationException::withMessages(['reference' => 'This payment reference has already been recorded.']);
             }
 
             $payment->forceFill([
@@ -196,6 +180,8 @@ class PaymentService
                 'transaction_ref' => $transactionReference,
                 'completed_at' => now(),
             ])->save();
+
+            app(BillingService::class)->applyCredit($student, $actor);
 
             return $payment->fresh()->load(['student:id,full_name,student_number,class', 'invoice']);
         });
@@ -209,10 +195,27 @@ class PaymentService
         string $method,
         ?string $description = null,
         ?string $phoneNumber = null,
+        ?string $externalReference = null,
+        ?string $requestId = null,
     ): StudentPayment {
-        $payment = $this->generateControlNumber($student, $invoice, $amount, $method, $description);
+        return DB::transaction(function () use ($actor, $student, $invoice, $amount, $method, $description, $phoneNumber, $externalReference, $requestId) {
+            Student::whereKey($student->id)->lockForUpdate()->firstOrFail();
+            $controlNumber = $requestId ? 'CTRL-MANUAL-'.$requestId : null;
+            $existing = $controlNumber ? StudentPayment::where('control_number', $controlNumber)->first() : null;
+            if ($existing) {
+                if ((int) $existing->student_id !== (int) $student->id || BillingService::cents($existing->amount) !== BillingService::cents($amount) || $existing->payment_method !== $method || (int) $existing->invoice_id !== (int) $invoice?->id) {
+                    throw ValidationException::withMessages(['request_id' => 'This receipt request has already been used with different details.']);
+                }
 
-        return $this->process($payment, $method, $phoneNumber, $actor);
+                return $this->process($existing, $method, $phoneNumber, $actor, $externalReference);
+            }
+            if ($controlNumber && StudentPayment::withoutGlobalScope(SchoolScope::class)->where('control_number', $controlNumber)->exists()) {
+                throw ValidationException::withMessages(['request_id' => 'This receipt request has already been used.']);
+            }
+            $payment = $this->generateControlNumber($student, $invoice, $amount, $method, $description, $controlNumber);
+
+            return $this->process($payment, $method, $phoneNumber, $actor, $externalReference);
+        }, 3);
     }
 
     public function cancel(StudentPayment $payment): StudentPayment
@@ -234,12 +237,9 @@ class PaymentService
 
     public function instructions(StudentPayment $payment): array
     {
-        return [
-            'mpesa' => 'Pay Number: 123456, Amount: '.number_format((float) $payment->amount, 2, '.', ''),
-            'tigopesa' => 'Pay Number: 789012, Amount: '.number_format((float) $payment->amount, 2, '.', ''),
-            'airtel' => 'Pay Number: 456789, Amount: '.number_format((float) $payment->amount, 2, '.', ''),
-            'bank' => 'Use control number '.$payment->control_number.' as the bank transfer reference.',
-        ];
+        $instruction = 'Use control number '.$payment->control_number." with the school accountant's official payment details. Payment is confirmed by the accountant after funds are received.";
+
+        return array_fill_keys(array_keys(self::METHODS), $instruction);
     }
 
     private function transactionReference(string $method): string

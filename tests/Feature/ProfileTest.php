@@ -36,7 +36,7 @@ class ProfileTest extends TestCase
 
     public function test_user_can_upload_avatar_and_change_password(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $user = User::factory()->role('teacher')->create([
             'password' => Hash::make('oldpassword'),
         ]);

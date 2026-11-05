@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
+use App\Services\SchoolContext;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Student extends Model
 {
+    use BelongsToSchool;
+
     /** @use HasFactory<StudentFactory> */
     use HasFactory;
 
@@ -68,6 +72,8 @@ class Student extends Model
     public function parents(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'parent_students', 'student_id', 'parent_id')
+            ->using(ParentStudent::class)
+            ->withPivotValue('school_id', $this->school_id ?? app(SchoolContext::class)->id() ?? -1)
             ->withPivot('relationship', 'is_primary');
     }
 

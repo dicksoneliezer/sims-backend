@@ -114,7 +114,7 @@ class StudentManagementTest extends TestCase
 
     public function test_admin_can_upload_and_remove_student_photo(): void
     {
-        Storage::fake('public');
+        Storage::fake('local');
         $this->actingAsSuperAdmin();
 
         $response = $this->post('/api/v1/admin/students', [
@@ -124,13 +124,13 @@ class StudentManagementTest extends TestCase
 
         $path = $response->json('data.photo');
         $this->assertNotNull($path);
-        Storage::disk('public')->assertExists($path);
+        Storage::disk('local')->assertExists($path);
 
         $this->putJson("/api/v1/admin/students/{$response->json('data.id')}", [
             'remove_photo' => true,
         ])->assertOk();
 
-        Storage::disk('public')->assertMissing($path);
+        Storage::disk('local')->assertMissing($path);
     }
 
     public function test_student_results_endpoint_returns_summary(): void

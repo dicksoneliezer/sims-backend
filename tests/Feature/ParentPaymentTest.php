@@ -42,20 +42,20 @@ class ParentPaymentTest extends TestCase
         return [$parent, $child, $otherChild, $invoice];
     }
 
-    public function test_parent_can_view_payment_methods_but_not_cash(): void
+    public function test_parent_can_view_payment_methods_including_cash_at_the_school_office(): void
     {
         [$parent] = $this->makeFamily();
         Sanctum::actingAs($parent);
 
         $response = $this->getJson('/api/v1/parent/payments/methods')
             ->assertOk()
-            ->assertJsonCount(4, 'data');
+            ->assertJsonCount(5, 'data');
 
         $codes = collect($response->json('data'))->pluck('code')->all();
 
         $this->assertContains('mpesa', $codes);
         $this->assertContains('bank', $codes);
-        $this->assertNotContains('cash', $codes);
+        $this->assertContains('cash', $codes);
     }
 
     public function test_parent_can_generate_control_number_only_for_own_child(): void
@@ -87,11 +87,11 @@ class ParentPaymentTest extends TestCase
             'invoice_id' => $invoice->id,
             'amount' => 2000,
             'payment_method' => 'mpesa',
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors('amount');
+        ])->assertCreated()
+            ->assertJsonPath('data.status', 'pending');
     }
 
-    public function test_parent_completes_payment_and_invoice_is_updated(): void
+    public function test_accountant_confirms_parent_payment_and_invoice_is_updated(): void
     {
         [$parent, $child, , $invoice] = $this->makeFamily();
         Sanctum::actingAs($parent);
@@ -105,7 +105,9 @@ class ParentPaymentTest extends TestCase
 
         $paymentId = $control->json('data.id');
 
-        $paid = $this->postJson("/api/v1/parent/payments/{$paymentId}/pay", [
+        $this->postJson("/api/v1/parent/payments/{$paymentId}/pay", ['payment_method' => 'bank'])->assertUnprocessable()->assertJsonValidationErrors('payment');
+        Sanctum::actingAs(User::factory()->role('accountant')->create());
+        $paid = $this->postJson("/api/v1/accountant/control-numbers/{$paymentId}/confirm", [
             'payment_method' => 'bank',
         ])->assertOk()
             ->assertJsonPath('data.status', 'completed')
@@ -119,6 +121,7 @@ class ParentPaymentTest extends TestCase
             'status' => 'partial',
         ]);
 
+        Sanctum::actingAs($parent);
         $this->getJson('/api/v1/parent/payments/balance')
             ->assertOk()
             ->assertJsonPath('data.total_outstanding', 600)

@@ -21,9 +21,11 @@ class AccountantPaymentController extends Controller
         $data = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
             'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
             'payment_method' => ['required', Rule::in(array_keys(PaymentService::METHODS))],
             'description' => ['nullable', 'string'],
+            'request_id' => ['nullable', 'uuid'],
+            'reference' => ['nullable', 'string', 'max:60'],
             'phone_number' => ['nullable', 'string', 'max:30'],
         ]);
 
@@ -44,6 +46,8 @@ class AccountantPaymentController extends Controller
             $data['payment_method'],
             $data['description'] ?? null,
             $data['phone_number'] ?? null,
+            $data['reference'] ?? null,
+            $data['request_id'] ?? null,
         );
 
         return response()->json([

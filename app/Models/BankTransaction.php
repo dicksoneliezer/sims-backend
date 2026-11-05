@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class BankTransaction extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = [
         'bank_statement_id',
         'transaction_date',

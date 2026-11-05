@@ -11,10 +11,10 @@ use App\Models\BankTransaction;
 use App\Models\ReconciliationReport;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\SchoolFileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 
 class AccountantController extends Controller
 {
@@ -119,7 +119,7 @@ class AccountantController extends Controller
         ]);
 
         $file = $request->file('file');
-        $path = $file->store('bank-statements', 'local');
+        $path = app(SchoolFileService::class)->store($file, 'bank-statements');
 
         $statement = BankStatement::create([
             'bank_name' => $validated['bank_name'],
@@ -139,7 +139,9 @@ class AccountantController extends Controller
         DB::beginTransaction();
         try {
             foreach ($rows as $row) {
-                if (count($row) < 4) continue;
+                if (count($row) < 4) {
+                    continue;
+                }
 
                 BankTransaction::create([
                     'bank_statement_id' => $statement->id,
@@ -166,9 +168,10 @@ class AccountantController extends Controller
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to import: ' . $e->getMessage(),
+                'message' => 'Failed to import: '.$e->getMessage(),
             ], 500);
         }
     }
@@ -212,7 +215,9 @@ class AccountantController extends Controller
             ->get();
 
         foreach ($bankTransactions as $bankTxn) {
-            if (!$bankTxn->reference) continue;
+            if (! $bankTxn->reference) {
+                continue;
+            }
 
             $match = Transaction::where('reference', $bankTxn->reference)->first();
 

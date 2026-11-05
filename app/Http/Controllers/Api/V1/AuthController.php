@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Resources\UserResource;
+use App\Models\School;
+use App\Models\Scopes\SchoolScope;
 use App\Models\User;
+use App\Services\SchoolContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -23,10 +26,9 @@ class AuthController extends Controller
         // =========================================
         $login = $credentials['username'] ?? $credentials['login'] ?? '';
 
-        $user = User::where('username', $login)
-            ->orWhere('email', $login)
-            ->orWhere('phone', $login)
-            ->first();
+        $matches = User::withoutGlobalScope(SchoolScope::class)
+            ->where(fn ($query) => $query->where('username', $login)->orWhere('email', $login)->orWhere('phone', $login))->get();
+        $user = $matches->count() === 1 ? $matches->first() : null;
 
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             if ($user) {
@@ -34,6 +36,10 @@ class AuthController extends Controller
             }
 
             return $this->error('Invalid credentials', 401);
+        }
+
+        if ($user->role !== 'system_admin' && (! $user->school_id || ! School::whereKey($user->school_id)->where('is_active', true)->exists())) {
+            return $this->error('Your school is not active. Contact the administrator.', 403);
         }
 
         if (! $user->is_active) {
@@ -49,12 +55,12 @@ class AuthController extends Controller
             ], 423);
         }
 
-        $user->forceFill([
+        app(SchoolContext::class)->run($user->school_id, fn () => $user->forceFill([
             'login_attempts' => 0,
             'locked_until' => null,
             'last_login' => now(),
             'last_ip' => $request->ip(),
-        ])->save();
+        ])->save());
 
         $token = $user->createToken('auth-token')->plainTextToken;
 
@@ -62,7 +68,7 @@ class AuthController extends Controller
             'success' => true,
             'message' => 'Login successful',
             'data' => [
-                'user' => new UserResource($user),
+                'user' => new UserResource($user->load('school:id,name,code')),
                 'token' => $token,
                 'token_type' => 'Bearer',
             ],
@@ -102,7 +108,7 @@ class AuthController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Authenticated user',
-            'data' => new UserResource($request->user()),
+            'data' => new UserResource($request->user()->load('school:id,name,code')),
         ]);
     }
 
@@ -136,11 +142,11 @@ class AuthController extends Controller
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password) {
-                $user->forceFill([
+                app(SchoolContext::class)->run($user->school_id, fn () => $user->forceFill([
                     'password' => $password,
                     'login_attempts' => 0,
                     'locked_until' => null,
-                ])->save();
+                ])->save());
 
                 $user->tokens()->delete();
             }
@@ -165,7 +171,7 @@ class AuthController extends Controller
             $user->locked_until = now()->addMinutes(User::LOCK_MINUTES);
         }
 
-        $user->save();
+        app(SchoolContext::class)->run($user->school_id, fn () => $user->save());
     }
 
     private function error(string $message, int $status): JsonResponse

@@ -8,6 +8,7 @@ use App\Http\Resources\TeacherNoteResource;
 use App\Models\SchoolCalendar;
 use App\Models\Student;
 use App\Models\TeacherNote;
+use App\Services\BillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +21,7 @@ class StudentSelfController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Student profile retrieved',
+            'financial_summary' => app(BillingService::class)->summary($student),
             'data' => new StudentResource($student),
         ]);
     }

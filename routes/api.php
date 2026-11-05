@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\AdminFinanceController;
 use App\Http\Controllers\Api\V1\AdminInventoryController;
 use App\Http\Controllers\Api\V1\AdminReportController;
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CalendarController;
 use App\Http\Controllers\Api\V1\ControlNumberController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -23,8 +24,11 @@ use App\Http\Controllers\Api\V1\MatronController;
 use App\Http\Controllers\Api\V1\ParentChildController;
 use App\Http\Controllers\Api\V1\ParentController;
 use App\Http\Controllers\Api\V1\ParentPaymentController;
+use App\Http\Controllers\Api\V1\ParentSchoolController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\SchoolClassController;
+use App\Http\Controllers\Api\V1\SchoolController;
+use App\Http\Controllers\Api\V1\SchoolFileController;
 use App\Http\Controllers\Api\V1\SchoolSettingController;
 use App\Http\Controllers\Api\V1\StoreKeeperController;
 use App\Http\Controllers\Api\V1\StudentController;
@@ -54,12 +58,22 @@ Route::prefix('v1')->group(function () {
         Route::post('reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:5,1');
     });
 
-    Route::middleware(['auth:sanctum', 'throttle:60,1'])->group(function () {
+    Route::middleware(['auth:sanctum', 'school.context', 'throttle:60,1'])->group(function () {
         Route::prefix('auth')->group(function () {
             Route::post('logout', [AuthController::class, 'logout']);
             Route::post('refresh', [AuthController::class, 'refresh']);
             Route::get('me', [AuthController::class, 'me']);
         });
+
+        Route::prefix('system/schools')->middleware('role:system_admin')->group(function (): void {
+            Route::get('/', [SchoolController::class, 'index']);
+            Route::post('/', [SchoolController::class, 'store']);
+            Route::patch('{school}', [SchoolController::class, 'update']);
+        });
+
+        Route::get('school-files/avatars/{userId}', [SchoolFileController::class, 'avatar'])->whereNumber('userId')->name('school-files.avatar');
+        Route::get('school-files/students/{student}/photo', [SchoolFileController::class, 'studentPhoto'])->name('school-files.student');
+        Route::get('school-files/expenses/{expense}/receipt', [SchoolFileController::class, 'receipt'])->middleware('role:super_admin,accountant')->name('school-files.receipt');
 
         Route::get('profile', [ProfileController::class, 'show']);
         Route::put('profile', [ProfileController::class, 'update']);
@@ -210,6 +224,10 @@ Route::prefix('v1')->group(function () {
         // ACCOUNTANT ROUTES (UPDATED)
         // =========================================
         Route::prefix('accountant')->middleware('role:accountant')->group(function () {
+            Route::get('billing', [BillingController::class, 'report']);
+            Route::get('billing/fee-structures', [BillingController::class, 'feeStructures']);
+            Route::post('billing/transfer-credit', [BillingController::class, 'transfer']);
+            Route::post('control-numbers/{payment}/confirm', [BillingController::class, 'confirm']);
             Route::get('dashboard', [DashboardController::class, 'show']);
             Route::get('students', [StudentController::class, 'index']);
             Route::get('students/{student}', [StudentController::class, 'show']);
@@ -319,6 +337,8 @@ Route::prefix('v1')->group(function () {
 
         // STUDENT ROUTES
         Route::prefix('student')->middleware('role:student')->group(function () {
+            Route::get('billing', [BillingController::class, 'student']);
+            Route::post('billing/control-number', [BillingController::class, 'studentControlNumber']);
             Route::get('dashboard', [DashboardController::class, 'show']);
             Route::get('profile', [StudentSelfController::class, 'profile']);
             Route::get('results', [StudentSelfController::class, 'results']);
@@ -334,6 +354,9 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::prefix('parent')->middleware('role:parent')->group(function () {
+            Route::post('billing/transfer-credit', [BillingController::class, 'transfer']);
+            Route::get('schools', [ParentSchoolController::class, 'index']);
+            Route::get('schools/{school}', [ParentSchoolController::class, 'show'])->whereNumber('school');
             Route::get('dashboard', [DashboardController::class, 'show']);
             Route::get('children', [ParentChildController::class, 'index']);
             Route::get('children/{student}', [ParentChildController::class, 'show']);

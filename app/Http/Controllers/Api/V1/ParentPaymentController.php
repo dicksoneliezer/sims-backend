@@ -7,12 +7,14 @@ use App\Http\Resources\StudentPaymentResource;
 use App\Models\Invoice;
 use App\Models\Student;
 use App\Models\StudentPayment;
+use App\Services\BillingService;
 use App\Services\PaymentService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ParentPaymentController extends Controller
 {
@@ -56,8 +58,8 @@ class ParentPaymentController extends Controller
 
         $data = $request->validate([
             'student_id' => ['required', 'integer', 'exists:students,id'],
-            'invoice_id' => ['required', 'integer', 'exists:invoices,id'],
-            'amount' => ['required', 'numeric', 'gt:0'],
+            'invoice_id' => ['nullable', 'integer', 'exists:invoices,id'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:999999999999.99'],
             'payment_method' => ['required', Rule::in($parentMethods)],
             'description' => ['nullable', 'string'],
         ]);
@@ -69,7 +71,7 @@ class ParentPaymentController extends Controller
         );
 
         $student = Student::findOrFail($data['student_id']);
-        $invoice = Invoice::findOrFail($data['invoice_id']);
+        $invoice = empty($data['invoice_id']) ? null : Invoice::findOrFail($data['invoice_id']);
 
         $payment = $this->paymentService->generateControlNumber(
             $student,
@@ -101,18 +103,7 @@ class ParentPaymentController extends Controller
 
         $this->ensurePaymentOwner($request, $payment);
 
-        $payment = $this->paymentService->process(
-            $payment,
-            $data['payment_method'],
-            $data['phone_number'] ?? null,
-            $request->user(),
-        );
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Payment completed successfully.',
-            'data' => new StudentPaymentResource($payment),
-        ]);
+        throw ValidationException::withMessages(['payment' => 'Payments are confirmed by the accountant after funds are received. Use your control number with the school accountant.']);
     }
 
     public function cancel(Request $request, StudentPayment $payment): JsonResponse
@@ -154,7 +145,8 @@ class ParentPaymentController extends Controller
             ->orderBy('full_name')
             ->get();
 
-        $data = $children->map(function (Student $child) {
+        $summaries = app(BillingService::class)->summaries($children->modelKeys());
+        $data = $children->map(function (Student $child) use ($summaries) {
             $invoices = $child->invoices;
 
             return [
@@ -162,12 +154,12 @@ class ParentPaymentController extends Controller
                 'student_name' => $child->full_name,
                 'student_number' => $child->student_number,
                 'class' => $child->class,
-                'total_invoiced' => (float) $invoices->sum('amount'),
-                'total_paid' => (float) $invoices->sum('amount_paid'),
-                'outstanding' => (float) $invoices->sum('balance'),
+                ...$summaries[$child->id],
+                'outstanding' => $summaries[$child->id]['total_outstanding'],
                 'invoices' => $invoices->map(fn (Invoice $invoice) => [
                     'id' => $invoice->id,
                     'invoice_number' => $invoice->invoice_number,
+                    'period' => $invoice->period,
                     'description' => $invoice->description,
                     'amount' => $invoice->amount,
                     'amount_paid' => $invoice->amount_paid,

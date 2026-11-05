@@ -28,7 +28,7 @@ class UserFactory extends Factory
             'full_name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'phone' => fake()->numerify('+2557########'),
-            'role' => fake()->randomElement(User::ROLES),
+            'role' => fake()->randomElement(array_values(array_diff(User::ROLES, ['system_admin']))),
             'is_active' => true,
             'password' => static::$password ??= Hash::make('password'),
         ];

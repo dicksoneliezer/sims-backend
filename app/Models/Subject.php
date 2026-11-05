@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Subject extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = ['code', 'name', 'level', 'description', 'is_active'];
 
     protected function casts(): array

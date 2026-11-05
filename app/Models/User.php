@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
+use App\Services\SchoolContext;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -32,6 +34,8 @@ use Laravel\Sanctum\HasApiTokens;
 #[Hidden(['password'])]
 class User extends Authenticatable
 {
+    use BelongsToSchool;
+
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -87,6 +91,8 @@ class User extends Authenticatable
     public function children(): BelongsToMany
     {
         return $this->belongsToMany(Student::class, 'parent_students', 'parent_id', 'student_id')
+            ->using(ParentStudent::class)
+            ->withPivotValue('school_id', $this->school_id ?? app(SchoolContext::class)->id() ?? -1)
             ->withPivot('relationship', 'is_primary');
     }
 

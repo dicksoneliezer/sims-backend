@@ -9,16 +9,20 @@ use App\Http\Resources\InvoiceResource;
 use App\Http\Resources\StudentResource;
 use App\Http\Resources\TransactionResource;
 use App\Models\SchoolClass;
+use App\Models\Scopes\SchoolScope;
 use App\Models\Student;
 use App\Models\TeacherClass;
 use App\Models\TeacherSubject;
 use App\Models\User;
+use App\Services\BillingService;
+use App\Services\SchoolContext;
+use App\Services\SchoolFileService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 
 class StudentController extends Controller
 {
@@ -76,7 +80,7 @@ class StudentController extends Controller
         unset($data['photo']);
 
         if ($request->hasFile('photo')) {
-            $data['photo'] = $request->file('photo')->store('students/photos', 'public');
+            $data['photo'] = app(SchoolFileService::class)->store($request->file('photo'), 'students/photos');
         }
 
         if (empty($data['student_number'])) {
@@ -88,21 +92,29 @@ class StudentController extends Controller
         // =========================================
         $defaultPassword = 'student123';
 
-        $user = User::create([
-            'username' => $data['student_number'],
-            'full_name' => $data['full_name'],
-            'email' => $data['email'] ?? null,
-            'phone' => $data['parent_phone'] ?? null,
-            'password' => Hash::make($defaultPassword),
-            'role' => 'student',
-            'is_active' => $data['is_active'] ?? true,
-        ]);
+        $username = $data['student_number'];
+        $suffix = 1;
+        while (User::withoutGlobalScope(SchoolScope::class)->where(fn ($query) => $query->where('username', $username)->orWhere('email', $username)->orWhere('phone', $username))->exists()) {
+            $username = 'S'.app(SchoolContext::class)->id().'-'.$data['student_number'].'-'.$suffix++;
+        }
+        $student = DB::transaction(function () use ($data, $username, $defaultPassword): Student {
+            $user = User::create([
+                'username' => $username,
+                'full_name' => $data['full_name'],
+                'email' => $data['email'] ?? null,
+                'phone' => null,
+                'password' => Hash::make($defaultPassword),
+                'role' => 'student',
+                'is_active' => $data['is_active'] ?? true,
+            ]);
 
-        // =========================================
-        // 2. Unda Student (na user_id)
-        // =========================================
-        $data['user_id'] = $user->id;
-        $student = Student::create($data);
+            // =========================================
+            // 2. Unda Student (na user_id)
+            // =========================================
+            $data['user_id'] = $user->id;
+
+            return Student::create($data)->setRelation('user', $user);
+        });
 
         return response()->json([
             'success' => true,
@@ -115,7 +127,7 @@ class StudentController extends Controller
     public function show(Request $request, Student $student): JsonResponse
     {
         $this->ensureStudentAccess($request, $student);
-        $student->load(['parents', 'schoolClass:id,name,level,section']);
+        $student->load(['user:id,username', 'parents', 'schoolClass:id,name,level,section']);
 
         return response()->json([
             'success' => true,
@@ -131,7 +143,7 @@ class StudentController extends Controller
 
         if ($request->hasFile('photo')) {
             $this->deletePhoto($student);
-            $data['photo'] = $request->file('photo')->store('students/photos', 'public');
+            $data['photo'] = app(SchoolFileService::class)->store($request->file('photo'), 'students/photos');
         } elseif ($request->boolean('remove_photo')) {
             $this->deletePhoto($student);
             $data['photo'] = null;
@@ -148,22 +160,28 @@ class StudentController extends Controller
 
     public function destroy(Student $student): JsonResponse
     {
-        $this->deletePhoto($student);
+        return DB::transaction(function () use ($student): JsonResponse {
+            $student = Student::whereKey($student->id)->lockForUpdate()->firstOrFail();
+            if ($student->invoices()->exists() || $student->payments()->exists() || $student->transactions()->exists()) {
+                return response()->json(['success' => false, 'message' => 'This student has billing records and cannot be deleted. Deactivate the student to preserve financial history.', 'code' => 422], 422);
+            }
+            $this->deletePhoto($student);
 
-        // =========================================
-        // Futa User pia (kama ipo)
-        // =========================================
-        if ($student->user_id) {
-            User::where('id', $student->user_id)->where('role', 'student')->delete();
-        }
+            // =========================================
+            // Futa User pia (kama ipo)
+            // =========================================
+            if ($student->user_id) {
+                User::where('id', $student->user_id)->where('role', 'student')->delete();
+            }
 
-        $student->delete();
+            $student->delete();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Student deleted',
-            'data' => null,
-        ]);
+            return response()->json([
+                'success' => true,
+                'message' => 'Student deleted',
+                'data' => null,
+            ]);
+        });
     }
 
     public function results(Request $request, Student $student): JsonResponse
@@ -237,11 +255,7 @@ class StudentController extends Controller
             'success' => true,
             'message' => 'Student invoices retrieved',
             'data' => InvoiceResource::collection($invoices),
-            'summary' => [
-                'total_invoiced' => (float) $invoices->sum('amount'),
-                'total_paid' => (float) $invoices->sum('amount_paid'),
-                'total_outstanding' => (float) $invoices->sum('balance'),
-            ],
+            'summary' => app(BillingService::class)->summary($student),
         ]);
     }
 
@@ -325,7 +339,7 @@ class StudentController extends Controller
         do {
             $number = $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
             $sequence++;
-        } while (Student::where('student_number', $number)->exists());
+        } while (Student::withoutGlobalScope(SchoolScope::class)->where('student_number', $number)->exists());
 
         return $number;
     }
@@ -333,7 +347,7 @@ class StudentController extends Controller
     private function deletePhoto(Student $student): void
     {
         if ($student->photo) {
-            Storage::disk('public')->delete($student->photo);
+            app(SchoolFileService::class)->delete($student->photo);
         }
     }
 }

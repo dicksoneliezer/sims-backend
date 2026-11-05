@@ -7,9 +7,9 @@ use App\Http\Requests\Expense\StoreExpenseRequest;
 use App\Http\Requests\Expense\UpdateExpenseRequest;
 use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
+use App\Services\SchoolFileService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 class ExpenseController extends Controller
 {
@@ -54,7 +54,7 @@ class ExpenseController extends Controller
         unset($data['receipt']);
 
         if ($request->hasFile('receipt')) {
-            $data['receipt'] = $request->file('receipt')->store('finance/receipts', 'public');
+            $data['receipt'] = app(SchoolFileService::class)->store($request->file('receipt'), 'finance/receipts');
         }
 
         $data['expense_number'] = $this->nextExpenseNumber();
@@ -85,7 +85,7 @@ class ExpenseController extends Controller
 
         if ($request->hasFile('receipt')) {
             $this->deleteReceipt($expense);
-            $data['receipt'] = $request->file('receipt')->store('finance/receipts', 'public');
+            $data['receipt'] = app(SchoolFileService::class)->store($request->file('receipt'), 'finance/receipts');
         } elseif ($request->boolean('remove_receipt')) {
             $this->deleteReceipt($expense);
             $data['receipt'] = null;
@@ -128,7 +128,7 @@ class ExpenseController extends Controller
     private function deleteReceipt(Expense $expense): void
     {
         if ($expense->receipt) {
-            Storage::disk('public')->delete($expense->receipt);
+            app(SchoolFileService::class)->delete($expense->receipt);
         }
     }
 }

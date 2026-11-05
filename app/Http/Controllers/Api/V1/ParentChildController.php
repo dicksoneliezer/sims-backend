@@ -8,6 +8,7 @@ use App\Http\Resources\StudentPaymentResource;
 use App\Http\Resources\StudentResource;
 use App\Http\Resources\TeacherNoteResource;
 use App\Models\Student;
+use App\Services\BillingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -79,11 +80,7 @@ class ParentChildController extends Controller
             'success' => true,
             'message' => 'Child invoices retrieved',
             'data' => InvoiceResource::collection($invoices),
-            'summary' => [
-                'total_invoiced' => (float) $invoices->sum('amount'),
-                'total_paid' => (float) $invoices->sum('amount_paid'),
-                'total_outstanding' => (float) $invoices->sum('balance'),
-            ],
+            'summary' => app(BillingService::class)->summary($student),
         ]);
     }
 

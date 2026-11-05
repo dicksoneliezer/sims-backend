@@ -5,7 +5,6 @@ namespace App\Http\Resources;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @mixin User
@@ -16,6 +15,8 @@ class UserResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'school_id' => $this->school_id,
+            'school' => $this->whenLoaded('school', fn () => $this->school?->only(['id', 'name', 'code'])),
             'username' => $this->username,
             'full_name' => $this->full_name,
             'email' => $this->email,
@@ -26,7 +27,7 @@ class UserResource extends JsonResource
             'is_active' => $this->is_active,
             'last_login' => $this->last_login?->toIso8601String(),
             'profile_pic' => $this->profile_pic,
-            'profile_pic_url' => $this->profile_pic ? Storage::disk('public')->url($this->profile_pic) : null,
+            'profile_pic_url' => $this->profile_pic ? route('school-files.avatar', ['userId' => $this->id, 'v' => substr(hash('sha256', $this->profile_pic), 0, 16)]) : null,
             'dashboard_path' => $this->dashboardPath(),
         ];
     }

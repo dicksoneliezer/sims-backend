@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToSchool;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class TeacherNote extends Model
 {
+    use BelongsToSchool;
+
     protected $fillable = ['teacher_id', 'student_id', 'title', 'note', 'type', 'is_read'];
 
     protected function casts(): array

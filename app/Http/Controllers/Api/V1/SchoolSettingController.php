@@ -48,6 +48,10 @@ class SchoolSettingController extends Controller
             );
         }
 
+        if (array_key_exists('school_name', $request->validated())) {
+            $request->user()->school()->update(['name' => $request->validated('school_name')]);
+        }
+
         return $this->show();
     }
 }
